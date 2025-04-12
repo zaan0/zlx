@@ -1,6 +1,17 @@
 {
-  "ipinfo": { "ip": "123.45.67.89", "city": "São Paulo", ... },
-  "ipapi": { "ip": "123.45.67.89", "city": "São Paulo", ... },
-  "ipqualityscore": { "vpn": false, "proxy": false, ... },
-  "dispositivo": { "device": { "type": "Desktop" }, ... }
+  "webhook": "https://discord.com/api/webhooks/SEU_WEBHOOK_AQUI",
+  "embed": {
+    "title": "Nova Verificação",
+    "color": "#FF0000",
+    "fields": [
+      { "name": "**Nome**", "key": "nick" },
+      { "name": "**Data**", "key": "date" },
+      { "name": "**IP**", "key": "ip" },
+      { "name": "**Localização**", "key": "loc" },
+      { "name": "**Cidade**", "key": "cidade" },
+      { "name": "**Estado**", "key": "estado" },
+      { "name": "**País**", "key": "pais" },
+      { "name": "**Dispositivo**", "key": "dispositivo" }
+    ]
+  }
 }
