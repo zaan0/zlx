@@ -1,0 +1,2 @@
+# zlx
+server zlx
